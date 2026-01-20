@@ -20,13 +20,13 @@ export async function PATCH(
     data: { assigneeId, title, description, priority },
   });
 
-  if (currentTask?.assigneeId != assigneeId)
-    await prisma.notification.create({
-      data: {
-        userId: assigneeId,
-        message: `${user.id} assigned you to the task ${title} (${taskId})`,
-      },
-    });
+  // if (currentTask?.assigneeId != assigneeId)
+  //   await prisma.notification.create({
+  //     data: {
+  //       userId: assigneeId,
+  //       message: `${user.id} assigned you to the task ${title} (${taskId})`,
+  //     },
+  //   });
 
   return NextResponse.json(updatedTask);
 }

@@ -12,7 +12,7 @@ export function proxy(request: NextRequest) {
     
     // 2. Identify User (IP based for now, or Session Token if available)
     const ip = request.ip || "127.0.0.1";
-    const limit = 100; // Limit: 100 requests
+    const limit = 2; // Limit: 100 requests
     const windowMs = 60 * 1000; // Window: 1 minute
 
     if (!rateLimitMap.has(ip)) {
