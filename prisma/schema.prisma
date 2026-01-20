@@ -1,0 +1,168 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// --- 1. Identity & Auth (Manual Implementation Support) ---
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    // For your manual auth
+  fullName      String
+  avatarUrl     String?
+  role          String    @default("USER") // Global RBAC: "USER", "ADMIN"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  sessions      Session[]
+  ownedProjects Project[] @relation("ProjectOwner")
+  memberships   ProjectMember[]
+  assignedTasks Task[]
+  comments      Comment[]
+  timeLogs      TimeLog[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique // The token stored in the cookie
+  userId       String
+  expiresAt    DateTime
+  ipAddress    String?  // Req: "See active sessions"
+  userAgent    String?  // Req: "See active sessions" (Browser/OS info)
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// --- 2. Project Management ---
+
+model Project {
+  id          String   @id @default(uuid())
+  key         String   // e.g., "PROJ" (for human-readable task IDs like PROJ-1)
+  title       String
+  description String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner       User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members     ProjectMember[]
+  columns     Column[]
+  tasks       Task[]
+  activityLogs ActivityLog[]
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId]) // Prevent duplicate membership
+}
+
+// --- 3. Kanban Board Structure ---
+
+model Column {
+  id        String   @id @default(uuid())
+  projectId String
+  title     String   // e.g., "To Do", "In Progress"
+  order     Int      // To persist drag-and-drop order of columns
+  
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+}
+
+// --- 4. Task Domain ---
+
+model Task {
+  id          String    @id @default(uuid())
+  projectId   String
+  columnId    String
+  assigneeId  String?   // Nullable (task can be unassigned)
+  
+  title       String
+  description String?
+  priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH
+  dueDate     DateTime?
+  order       Int       // To persist drag-and-drop order within a column
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column      Column    @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  assignee    User?     @relation(fields: [assigneeId], references: [id])
+  
+  comments    Comment[]
+  timeLogs    TimeLog[]
+  activityLogs ActivityLog[] // Task-specific history
+}
+
+// --- 5. Interactions & Logging ---
+
+model Comment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id])
+}
+
+model TimeLog {
+  id          String   @id @default(uuid())
+  taskId      String
+  userId      String
+  startTime   DateTime
+  endTime     DateTime? // Null if timer is currently running
+  durationMin Int?      // Calculated when timer stops, or manually entered
+  description String?   // Optional note on what was done
+
+  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  projectId   String?
+  taskId      String?  // Optional: Some actions are project-level only
+  userId      String?
+  actionType  String   // e.g., "CREATE_TASK", "MOVE_TASK", "COMMENT"
+  entityTitle String?  // Snapshot of the entity name for display
+  metadata    String?  // JSON string storing details (e.g. { "from": "To Do", "to": "Done" })
+  createdAt   DateTime @default(now())
+
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   // Recipient
+  message   String
+  link      String?  // URL to redirect to (e.g., /projects/123/tasks/456)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
